@@ -1,15 +1,20 @@
 from fastapi import FastAPI, Request
+from hazelcast import HazelcastClient
+import sys
+import uvicorn
 
+hazelcast_client = HazelcastClient(
+    cluster_members=["172.17.0.2:5701", "172.17.0.3:5701", "172.17.0.4:5701"],
+    cluster_name="dev"
+)
+
+hz_map = hazelcast_client.get_map("hz_map").blocking()
 app = FastAPI()
-messages_allocs = {}
-
-logging_endpoint = "http://localhost:8081/"
-
-
 
 @app.get('/')
 async def get_response():
-    return str(messages_allocs)
+    map_values = hz_map.values()    
+    return "\n".join(map_values)
 
 @app.post('/')
 async def create2_message(request: Request):
@@ -17,12 +22,12 @@ async def create2_message(request: Request):
     message = data.get("message")
     uuid = data.get('uuid')
 
-    global messages_allocs
     print(f"UUID={uuid} of message '{message}'")
-    messages_allocs[uuid]=message
-    return {"message": f"Received message XXXXXX: {message}"}
+    hz_map.put(uuid, message)
+    return {"message": f"Received message {uuid}: {message}"}
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="localhost", port=8081, log_level="debug")
+    
+    port = int(sys.argv[1])
+    uvicorn.run(app, host="localhost", port=port)
